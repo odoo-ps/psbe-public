@@ -21,30 +21,28 @@ class ProcurementGroup(models.Model):
             ], order='process_date', limit=1)
 
         if not oldest_orderpoint:  # First pass, no orderpoints have been processed yet
-            oldest_process_date = fields.Datetime.to_string(datetime.min)
+            # so process all (active) orderpoints
+            domain = [(1, '=', 1)]
         else:
             oldest_process_date = oldest_orderpoint.process_date
 
-        recently_moved_products = self.env['stock.quant'].with_context(prefetch_fields=False).search([
-            '|',
-                ('write_date', '>=', oldest_process_date),
-                ('create_date', '>=', oldest_process_date)]).mapped('product_id')
+            recently_moved_products = self.env['stock.quant'].with_context(prefetch_fields=False).search([
+                '|',
+                    ('write_date', '>=', oldest_process_date),
+                    ('create_date', '>=', oldest_process_date)]).mapped('product_id')
 
-        recently_moved_products |= self.env['stock.move'].with_context(prefetch_fields=False).search([
-            '|',
-                ('write_date', '>=', oldest_process_date),
-                ('create_date', '>=', oldest_process_date)]).mapped('product_id')
+            recently_moved_products |= self.env['stock.move'].with_context(prefetch_fields=False).search([
+                '|',
+                    ('write_date', '>=', oldest_process_date),
+                    ('create_date', '>=', oldest_process_date)]).mapped('product_id')
 
-        domain = [
-            '|',
-                ('force_reprocess', '=', True),
-                ('product_id', 'in', recently_moved_products.ids)
-        ]
-
-        if oldest_orderpoint:
-            domain = ['|'] + domain + [('process_date', '=', False)]
-        else:
-            domain = ['|'] + domain + [('product_min_qty', '>', 0)]
+            domain = [
+                '|',
+                    '|',
+                        ('force_reprocess', '=', True),
+                        ('process_date', '=', False),
+                    ('product_id', 'in', recently_moved_products.ids)
+            ]
 
         if company_id:
             domain = ['&'] + domain + [('company_id', '=', company_id)]
